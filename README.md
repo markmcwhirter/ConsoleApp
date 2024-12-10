@@ -1,122 +1,60 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 using System;
-using System.Linq;
-using System.Linq.Expressions;
+using System.IO;
+using Newtonsoft.Json;
 
-class Program
+namespace JsonUtility
 {
-    static void Main()
+    public static class JsonFileHandler
     {
-        // Mock LINQ query
-        var query = from EMP in tdv.EMPL_Data
-                    join IDS in tdc.EMPL_AccountsIDs on EMP.Emp_PK equals IDS.FK_Emp_PK into joined
-                    from IDS in joined.DefaultIfEmpty() // Simulate left outer join
-                    where IDS.LoginID == objSysID.LoginID
-                    select new { EMP.DisplayNameLFM, IDS?.LoginID };
-
-        // Parse and generate both the left and right outer join
-        ParseAndGenerateFluentWithJoins(query);
-    }
-
-    static void ParseAndGenerateFluentWithJoins(IQueryable query)
-    {
-        // Extract query expression
-        var queryExpression = query.Expression;
-
-        // Generate fluent queries
-        string fluentQuery = GenerateFluentQuery(queryExpression);
-        string rightOuterJoinQuery = ConvertToRightOuterJoin(fluentQuery);
-
-        // Display results
-        Console.WriteLine("Generated Fluent Query (Left Join):");
-        Console.WriteLine(fluentQuery);
-
-        Console.WriteLine("\nGenerated Fluent Query (Right Join):");
-        Console.WriteLine(rightOuterJoinQuery);
-    }
-
-    static string GenerateFluentQuery(Expression expression)
-    {
-        string fluentQuery = "";
-        if (expression is MethodCallExpression methodCall)
+        /// <summary>
+        /// Reads a JSON file and deserializes it into an object of the specified type.
+        /// </summary>
+        /// <typeparam name="T">The type of object to deserialize to.</typeparam>
+        /// <param name="filePath">The path to the JSON file.</param>
+        /// <returns>The deserialized object of type T.</returns>
+        public static T Read<T>(string filePath) where T : class
         {
-            if (methodCall.Method.Name == "GroupJoin")
-            {
-                var outerTable = GetMemberName(methodCall.Arguments[0]);
-                var innerTable = GetMemberName(methodCall.Arguments[1]);
-                var outerKeySelector = ExtractLambdaBody(methodCall.Arguments[2]);
-                var innerKeySelector = ExtractLambdaBody(methodCall.Arguments[3]);
+            if (string.IsNullOrEmpty(filePath))
+                throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
 
-                fluentQuery += $"{outerTable}.GroupJoin(\n    {innerTable},\n    {outerKeySelector},\n    {innerKeySelector},\n    (EMP, IDS) => new {{ EMP, IDS }}\n)";
-            }
-            else if (methodCall.Method.Name == "SelectMany")
-            {
-                fluentQuery += ".SelectMany(\n    joined => joined.IDS.DefaultIfEmpty(),\n    (EMP, IDS) => new { EMP, IDS }\n)";
-            }
-            else if (methodCall.Method.Name == "Where")
-            {
-                var condition = ExtractLambdaBody(methodCall.Arguments[1]);
-                fluentQuery += $".Where({condition})";
-            }
-            else if (methodCall.Method.Name == "Select")
-            {
-                var projection = ExtractLambdaBody(methodCall.Arguments[1]);
-                fluentQuery += $".Select({projection})";
-            }
+            if (!File.Exists(filePath))
+                throw new FileNotFoundException($"The file at {filePath} was not found.");
 
-            // Recursive processing for further arguments
-            foreach (var arg in methodCall.Arguments)
+            try
             {
-                fluentQuery += GenerateFluentQuery(arg);
+                string jsonContent = File.ReadAllText(filePath);
+                T obj = JsonConvert.DeserializeObject<T>(jsonContent);
+                return obj;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Error reading the JSON file.", ex);
             }
         }
-        return fluentQuery;
-    }
 
-    static string ConvertToRightOuterJoin(string fluentQuery)
-    {
-        // Simulate right outer join by swapping outer and inner collections
-        if (fluentQuery.Contains(".GroupJoin("))
+        /// <summary>
+        /// Serializes an object of the specified type to a JSON file.
+        /// </summary>
+        /// <typeparam name="T">The type of object to serialize.</typeparam>
+        /// <param name="filePath">The path to save the JSON file.</param>
+        /// <param name="data">The object to serialize.</param>
+        public static void Write<T>(string filePath, T data) where T : class
         {
-            fluentQuery = fluentQuery.Replace(".GroupJoin(", ".GroupJoin(\n    SWAPPED_");
-            fluentQuery = fluentQuery.Replace("(EMP, IDS)", "(IDS, EMP)");
-        }
-        if (fluentQuery.Contains(".SelectMany("))
-        {
-            fluentQuery = fluentQuery.Replace("(EMP, IDS)", "(IDS, EMP)");
-        }
+            if (string.IsNullOrEmpty(filePath))
+                throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
 
-        return fluentQuery;
-    }
+            if (data == null)
+                throw new ArgumentNullException(nameof(data), "Data cannot be null.");
 
-    static string GetMemberName(Expression expression)
-    {
-        if (expression is MemberExpression member)
-        {
-            return member.Member.Name;
+            try
+            {
+                string jsonContent = JsonConvert.SerializeObject(data, Formatting.Indented);
+                File.WriteAllText(filePath, jsonContent);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Error writing the JSON file.", ex);
+            }
         }
-        return "Unknown";
-    }
-
-    static string ExtractLambdaBody(Expression expression)
-    {
-        if (expression is LambdaExpression lambda)
-        {
-            return lambda.Body.ToString();
-        }
-        return "Unknown";
     }
 }
