@@ -1,68 +1,67 @@
-#
-#
-#
-#
-#
-
-
-
 using System;
-using System.IO;
-using Newtonsoft.Json;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
 
-namespace JsonUtility
+namespace ListToDataViewExample
 {
-    public static class JsonFileHandler
+    class Program
     {
-        /// <summary>
-        /// Reads a JSON file and deserializes it into an object of the specified type.
-        /// </summary>
-        /// <typeparam name="T">The type of object to deserialize to.</typeparam>
-        /// <param name="filePath">The path to the JSON file.</param>
-        /// <returns>The deserialized object of type T.</returns>
-        public static T Read<T>(string filePath) where T : class
+        static void Main(string[] args)
         {
-            if (string.IsNullOrEmpty(filePath))
-                throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
-
-            if (!File.Exists(filePath))
-                throw new FileNotFoundException($"The file at {filePath} was not found.");
-
-            try
+            // Example list of objects
+            var people = new List<Person>
             {
-                string jsonContent = File.ReadAllText(filePath);
-                T obj = JsonConvert.DeserializeObject<T>(jsonContent);
-                return obj;
-            }
-            catch (Exception ex)
+                new Person { Id = 1, Name = "Alice", Age = 30 },
+                new Person { Id = 2, Name = "Bob", Age = 25 },
+                new Person { Id = 3, Name = "Charlie", Age = 35 }
+            };
+
+            // Convert the list to a DataView
+            var dataView = ConvertListToDataView(people);
+
+            // Display the DataView rows (for demonstration)
+            foreach (DataRowView rowView in dataView)
             {
-                throw new InvalidOperationException("Error reading the JSON file.", ex);
+                var row = rowView.Row;
+                Console.WriteLine($"Id: {row["Id"]}, Name: {row["Name"]}, Age: {row["Age"]}");
             }
         }
 
-        /// <summary>
-        /// Serializes an object of the specified type to a JSON file.
-        /// </summary>
-        /// <typeparam name="T">The type of object to serialize.</typeparam>
-        /// <param name="filePath">The path to save the JSON file.</param>
-        /// <param name="data">The object to serialize.</param>
-        public static void Write<T>(string filePath, T data) where T : class
+        public static DataView ConvertListToDataView<T>(IEnumerable<T> list)
         {
-            if (string.IsNullOrEmpty(filePath))
-                throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+            // Convert list to DataTable
+            var dataTable = new DataTable(typeof(T).Name);
 
-            if (data == null)
-                throw new ArgumentNullException(nameof(data), "Data cannot be null.");
+            // Get properties of the object
+            var properties = typeof(T).GetProperties();
 
-            try
+            // Add columns to the DataTable based on object properties
+            foreach (var property in properties)
             {
-                string jsonContent = JsonConvert.SerializeObject(data, Formatting.Indented);
-                File.WriteAllText(filePath, jsonContent);
+                dataTable.Columns.Add(property.Name, Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType);
             }
-            catch (Exception ex)
+
+            // Add rows to the DataTable
+            foreach (var item in list)
             {
-                throw new InvalidOperationException("Error writing the JSON file.", ex);
+                var row = dataTable.NewRow();
+                foreach (var property in properties)
+                {
+                    row[property.Name] = property.GetValue(item) ?? DBNull.Value;
+                }
+                dataTable.Rows.Add(row);
             }
+
+            // Return DataView
+            return dataTable.DefaultView;
         }
+    }
+
+    public class Person
+    {
+        public int Id { get; set; }
+        public string Name { get; set; }
+        public int Age { get; set; }
     }
 }
